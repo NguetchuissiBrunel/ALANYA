@@ -1,0 +1,179 @@
+/* --- FOND GÉNÉRAL --- */
+.fenetre {
+    -fx-background-color: #ffffff;
+    -fx-padding: 0 5 0 0;
+}
+
+/* --- CONTAINER PRINCIPAL --- */
+.border-pane {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e0e0e0;
+    -fx-border-width: 1;
+    -fx-padding: 15;
+    -fx-background-radius: 15;
+    -fx-border-radius: 15;
+}
+
+/* --- VOLET GAUCHE --- */
+.left-pane {
+    -fx-background-color: #ADD8E6;
+    -fx-background-radius: 15;
+}
+
+/* --- ZONE DE CHAT --- */
+.text-area {
+    -fx-background-color: #F7F7FF;
+    -fx-border-color: #e0e0e0;
+    -fx-border-width: 1;
+    -fx-border-radius: 15;
+    -fx-background-radius: 15;
+    -fx-font-family: "Segoe UI";
+    -fx-font-size: 14px;
+    -fx-text-fill: #2c3e50;
+    -fx-padding: 10;
+}
+
+/* --- EMPILAGE --- */
+.stack-pane {
+    -fx-background-color: #F7F7FF;
+    -fx-background-radius: 15;
+}
+
+/* --- LISTES (contacts, groupes, fichiers) --- */
+.list-view {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e0e0e0;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+}
+
+.list-cell:filled:selected {
+    -fx-background-color: #3498db;
+    -fx-text-fill: white;
+    -fx-background-radius: 10;
+}
+
+.list-cell:filled:hover {
+    -fx-background-color: #ecf0f1;
+    -fx-background-radius: 10;
+}
+
+/* --- TITLED PANE --- */
+.titled-pane > .title {
+    -fx-background-color: #3498db;
+    -fx-text-fill: white;
+    -fx-font-family: "Segoe UI";
+    -fx-font-size: 14px;
+    -fx-padding: 8;
+    -fx-background-radius: 10 10 0 0;
+}
+
+.titled-pane > .content {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e0e0e0;
+    -fx-padding: 5;
+    -fx-background-radius: 0 0 10 10;
+}
+
+/* --- BOUTONS --- */
+.button {
+    -fx-background-color: #3498db;
+    -fx-text-fill: white;
+    -fx-font-family: "Segoe UI";
+    -fx-font-size: 16px;
+    -fx-min-width: 40;
+    -fx-max-width: 40;
+    -fx-min-height: 40;
+    -fx-max-height: 40;
+    -fx-background-radius: 20;
+    -fx-border-radius: 20;
+    -fx-alignment: center;
+    -fx-padding: 0;
+}
+
+.button:hover {
+    -fx-background-color: #2980b9;
+}
+
+/* Bouton "Terminer l'appel" */
+.button:end-call {
+    -fx-background-color: #ff5555;
+    -fx-background-radius: 20;
+}
+
+.button:end-call:hover {
+    -fx-background-color: #e74c3c;
+}
+
+/* --- CHAMPS DE TEXTE --- */
+.text-field {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e0e0e0;
+    -fx-border-width: 2;
+    -fx-border-radius: 30;
+    -fx-background-radius: 30;
+    -fx-font-family: "Segoe UI";
+    -fx-font-size: 14px;
+    -fx-padding: 8 16;
+}
+
+.text-field:focused {
+    -fx-border-color: #3498db;
+}
+
+/* --- DIALOGUES --- */
+.dialog-pane {
+    -fx-background-color: #ffffff;
+    -fx-font-family: "Segoe UI";
+    -fx-background-radius: 15;
+}
+
+.dialog-pane .button {
+    -fx-background-color: #3498db;
+    -fx-text-fill: white;
+    -fx-background-radius: 15;
+}
+
+.dialog-pane .button:hover {
+    -fx-background-color: #2980b9;
+}
+
+/* --- IMAGE VIEW / AVATAR --- */
+.image-view {
+    -fx-background-color: #000000;
+    -fx-border-color: #e0e0e0;
+    -fx-border-width: 1;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+}
+
+.Ima {
+    width: 150px;
+    height: 150px;
+    border-radius: 75px;
+    object-fit: cover;
+}
+
+/* --- HBOX VIDÉO --- */
+.hbox {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 15;
+}
+
+
+
+.emoji-button {
+    -fx-font-size: 24px;
+    -fx-padding: 6px;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-cursor: hand;
+    -fx-font-family: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+.chat-background {
+    -fx-background-image: url('/images/background.jpg');
+    -fx-background-size: cover;
+    -fx-background-position: center center;
+    -fx-background-repeat: no-repeat;
+}
