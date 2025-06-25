@@ -8,11 +8,17 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.util.Arrays;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import sac.client.ChatClient;
 
 public class AudioHandler {
+    private static final Logger logger = LoggerFactory.getLogger(AudioHandler.class);
     private TargetDataLine microphone;
     private SourceDataLine speakers;
     private boolean isStreaming = false;
@@ -20,7 +26,7 @@ public class AudioHandler {
     private String targetUser;
     private ScheduledExecutorService audioTimer;
     private final AudioFormat audioFormat;
-    private final int bufferSize = 2048; // Réduire la taille du buffer
+    private final int bufferSize = 1500; // Réduire la taille du buffer
     private DatagramSocket udpSocket;
     private String targetIp;
     private int targetPort;
@@ -64,12 +70,13 @@ public class AudioHandler {
         }
 
         isStreaming = true;
-        audioTimer = Executors.newSingleThreadScheduledExecutor();
+        audioTimer = Executors.newScheduledThreadPool(2);
         audioTimer.scheduleAtFixedRate(this::captureAndSendAudio, 0, 20, TimeUnit.MILLISECONDS);
         startAudioReceiver();
     }
 
     private void startAudioReceiver() {
+        ExecutorService receiverPool = Executors.newFixedThreadPool(2); // Pool pour la réception
         new Thread(() -> {
             try {
                 byte[] buffer = new byte[bufferSize];
@@ -77,18 +84,22 @@ public class AudioHandler {
                 System.out.println("AudioHandler: Starting audio receiver on port " + targetPort);
                 while (isStreaming && !udpSocket.isClosed()) {
                     udpSocket.receive(packet);
-                    System.out.println("AudioHandler: Received audio packet of size " + packet.getLength());
-                    receiveAudioData(packet.getData(), packet.getLength());
+                    byte[] packetData = Arrays.copyOf(packet.getData(), packet.getLength());
+                    receiverPool.submit(() -> {
+                        System.out.println("AudioHandler: Received audio packet of size " + packetData.length);
+                        receiveAudioData(packetData, packetData.length);
+                    });
                 }
             } catch (IOException e) {
                 if (isStreaming) {
                     e.printStackTrace();
                     System.err.println("AudioHandler: Error in audio receiver: " + e.getMessage());
                 }
+            } finally {
+                receiverPool.shutdown();
             }
         }).start();
     }
-
 
     public void stopAudioCapture() {
         isStreaming = false;
@@ -150,13 +161,20 @@ public class AudioHandler {
     public void receiveAudioData(byte[] audioData, int length) {
         if (speakers == null || !speakers.isOpen()) {
             System.err.println("Speakers not open or null");
+            logger.error("Speakers not open or null");
             return;
         }
         if (audioData == null || length <= 0) {
-            System.err.println("Invalid audio data received");
+            System.err.println("Invalid audio data received: length=" + length);
+            logger.warn("Invalid audio data received: length={}", length);
             return;
         }
-        speakers.write(audioData, 0, length);
+        try {
+            speakers.write(audioData, 0, length);
+            logger.info("Wrote {} bytes of audio data to speakers", length);
+        } catch (Exception e) {
+            logger.error("Error writing audio data to speakers: {}", e.getMessage(), e);
+        }
     }
 
     public void setTargetUser(String targetUser) {

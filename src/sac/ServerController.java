@@ -9,7 +9,7 @@ public class ServerController {
     private static final int PORT = 12340;
     private static Map<String, ClientHandler> clients = new HashMap<>();
     private static Map<String, Set<String>> groups = new HashMap<>();
-    private static ExecutorService clientPool = Executors.newFixedThreadPool(10);
+    private static ExecutorService clientPool = Executors.newFixedThreadPool(20);
     private static Map<String, List<String>> groupMessages = new HashMap<>();
     private static Map<String, List<String>> groupFiles = new HashMap<>();
 

@@ -72,7 +72,7 @@ public class VideoHandler {
             logger.info("Selected webcam: {}", webcam.getName()); // Modified logging
             isStreaming = true;
 
-            videoTimer = Executors.newScheduledThreadPool(2);
+            videoTimer = Executors.newScheduledThreadPool(4);
             videoTimer.scheduleAtFixedRate(this::captureAndSendFrame, 0, 1000 / frameRate, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             logger.error("Error opening webcam: {}", e.getMessage(), e); // Modified logging
@@ -100,13 +100,13 @@ public class VideoHandler {
 
     private void captureAndSendFrame() {
         if (!isStreaming || webcam == null || !webcam.isOpen()) {
-            logger.warn("Cannot capture frame: streaming={}, webcam={}", isStreaming, webcam); // Modified logging
+            logger.warn("Cannot capture frame: streaming={}, webcam={}", isStreaming, webcam);
             return;
         }
         try {
             BufferedImage image = webcam.getImage();
             if (image == null) {
-                logger.error("Webcam returned null image"); // Modified logging
+                logger.error("Webcam returned null image");
                 return;
             }
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -114,16 +114,29 @@ public class VideoHandler {
             ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").next();
             ImageWriteParam param = writer.getDefaultWriteParam();
             param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-            param.setCompressionQuality(0.7f); // Increased compression quality
+            param.setCompressionQuality(0.7f);
             writer.setOutput(ios);
             writer.write(null, new IIOImage(image, null, null), param);
             writer.dispose();
             byte[] frameData = baos.toByteArray();
             if (frameData.length == 0) {
-                logger.error("Encoded frame data is empty"); // Modified logging
+                logger.error("Encoded frame data is empty");
                 return;
             }
 
+            // Mettre à jour la vue locale
+            updateLocalVideoView(frameData);
+
+            // Envoyer les données sur un thread séparé
+            videoTimer.execute(() -> sendFrame(frameData));
+        } catch (IOException e) {
+            logger.error("Error processing frame: {}", e.getMessage(), e);
+            isStreaming = false;
+        }
+    }
+
+    private void sendFrame(byte[] frameData) {
+        try {
             ByteArrayOutputStream packetStream = new ByteArrayOutputStream();
             DataOutputStream dos = new DataOutputStream(packetStream);
             dos.writeByte(1);
@@ -131,19 +144,17 @@ public class VideoHandler {
             dos.write(frameData);
             byte[] packetData = packetStream.toByteArray();
 
-            updateLocalVideoView(frameData);
             if (targetIp != null && targetPort > 0) {
                 DatagramPacket packet = new DatagramPacket(packetData, packetData.length,
                         InetAddress.getByName(targetIp), targetPort);
                 udpSocket.send(packet);
-                logger.info("Sent frame of size {} to {}:{}", frameData.length, targetIp, targetPort); // Added logging
+                logger.info("Sent frame of size {} to {}:{}", frameData.length, targetIp, targetPort);
             }
         } catch (IOException e) {
-            logger.error("Error processing frame: {}", e.getMessage(), e); // Modified logging
+            logger.error("Error sending frame: {}", e.getMessage(), e);
             isStreaming = false;
         }
     }
-
     public void receiveVideoFrame(byte[] frameData) {
         if (frameData == null || frameData.length == 0) {
             logger.warn("Received empty or null video frame data"); // Modified logging

@@ -10,6 +10,8 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class ChatClient {
     private static final Logger logger = LoggerFactory.getLogger(ChatClient.class);
@@ -28,8 +30,7 @@ public class ChatClient {
     private DatagramSocket udpSocket;
     private String localIpAddress;
     private int localUdpPort;
-    private Map<String, CallEndpoint> callEndpoints = new HashMap<>();
-
+    private Map<String, Set<CallEndpoint>> callEndpoints = new HashMap<>();
     private static class CallEndpoint {
         String ip;
         int port;
@@ -141,7 +142,7 @@ public class ChatClient {
             Platform.runLater(() -> {
                 CallUI callUI = new CallUI(pseudo, caller, output, callerIp, callerPort);
                 activeCalls.put(caller, callUI);
-                callEndpoints.put(caller, new CallEndpoint(callerIp, callerPort));
+                callEndpoints.computeIfAbsent(caller, k -> new HashSet<>()).add(new CallEndpoint(callerIp, callerPort));
                 logger.info("Added call endpoint for {}: {}:{}", caller, callerIp, callerPort);
                 callUI.startCall(withVideo);
                 logger.info("Accepted {} call from {} at {}:{}", withVideo ? "video" : "audio", caller, callerIp, callerPort);
@@ -161,12 +162,11 @@ public class ChatClient {
             boolean isVideoCall = pendingCallTypes.getOrDefault(accepter, false);
             pendingCallTypes.remove(accepter);
 
-            // Fermer la fenêtre d'attente
             notificationManager.stopWaitingDialog();
 
             CallUI callUI = new CallUI(pseudo, accepter, output, accepterIp, accepterPort);
             activeCalls.put(accepter, callUI);
-            callEndpoints.put(accepter, new CallEndpoint(accepterIp, accepterPort));
+            callEndpoints.computeIfAbsent(accepter, k -> new HashSet<>()).add(new CallEndpoint(accepterIp, accepterPort));
             logger.info("Added call endpoint for {}: {}:{}", accepter, accepterIp, accepterPort);
             callUI.startCall(isVideoCall);
 
@@ -192,6 +192,7 @@ public class ChatClient {
     }
 
     private void startUdpReceiver() {
+        ExecutorService udpReceiverPool = Executors.newFixedThreadPool(4); // Pool pour la réception UDP
         new Thread(() -> {
             try {
                 byte[] buffer = new byte[65535];
@@ -199,60 +200,12 @@ public class ChatClient {
                 logger.info("Started UDP receiver on port {}", localUdpPort);
                 while (isRunning && !udpSocket.isClosed()) {
                     udpSocket.receive(packet);
+                    byte[] data = Arrays.copyOf(packet.getData(), packet.getLength());
                     String sourceIp = packet.getAddress().getHostAddress();
                     int sourcePort = packet.getPort();
                     logger.info("Received UDP packet from {}:{} of size {}", sourceIp, sourcePort, packet.getLength());
-                    byte[] data = Arrays.copyOf(packet.getData(), packet.getLength());
 
-                    // Chercher l'expéditeur par adresse IP uniquement
-                    String sender = callEndpoints.entrySet().stream()
-                            .filter(entry -> entry.getValue().ip.equals(sourceIp))
-                            .findFirst()
-                            .map(Map.Entry::getKey)
-                            .orElse(null);
-
-                    if (sender == null) {
-                        logger.warn("No sender found for packet from {}:{}", sourceIp, sourcePort);
-                        continue;
-                    }
-
-                    // Mettre à jour le port de l'expéditeur dans callEndpoints
-                    callEndpoints.put(sender, new CallEndpoint(sourceIp, sourcePort));
-                    logger.info("Updated call endpoint for {} to {}:{}", sender, sourceIp, sourcePort);
-
-                    if (data.length < 5) {
-                        logger.warn("Packet too small from {}:{}", sourceIp, sourcePort);
-                        continue;
-                    }
-
-                    ByteArrayInputStream bais = new ByteArrayInputStream(data);
-                    DataInputStream dis = new DataInputStream(bais);
-                    byte packetType = dis.readByte();
-                    int frameSize = dis.readInt();
-                    logger.info("Received packet type {}, frame size {}", packetType, frameSize);
-                    if (data.length - 5 != frameSize) {
-                        logger.warn("Invalid frame size: expected {}, got {}", frameSize, data.length - 5);
-                        continue;
-                    }
-
-                    byte[] frameData = new byte[frameSize];
-                    dis.readFully(frameData);
-
-                    Platform.runLater(() -> {
-                        CallUI callUI = activeCalls.get(sender);
-                        if (callUI != null) {
-                            if (packetType == 0) {
-                                callUI.receiveAudioData(frameData, frameSize);
-                            } else if (packetType == 1) {
-                                callUI.receiveVideoFrame(frameData);
-                                logger.info("Forwarded video frame to CallUI for {}", sender);
-                            } else {
-                                logger.warn("Unknown packet type {} from {}", packetType, sender);
-                            }
-                        } else {
-                            logger.warn("No active call for sender {}", sender);
-                        }
-                    });
+                    udpReceiverPool.submit(() -> processUdpPacket(data, sourceIp, sourcePort));
                 }
             } catch (IOException e) {
                 if (isRunning) {
@@ -260,8 +213,74 @@ public class ChatClient {
                     Platform.runLater(() ->
                             notificationManager.showNotification("Erreur de réception UDP : " + e.getMessage()));
                 }
+            } finally {
+                udpReceiverPool.shutdown();
             }
         }, "UdpReceiverThread").start();
+    }
+
+    private void processUdpPacket(byte[] data, String sourceIp, int sourcePort) {
+        try {
+            // Rechercher l'expéditeur en fonction de l'adresse IP et du port
+            String sender = callEndpoints.entrySet().stream()
+                    .filter(entry -> entry.getValue().stream()
+                            .anyMatch(endpoint -> endpoint.ip.equals(sourceIp)))
+                    .map(Map.Entry::getKey)
+                    .findFirst()
+                    .orElse(null);
+
+            if (sender == null) {
+                logger.warn("No sender found for packet from {}:{}", sourceIp, sourcePort);
+                return;
+            }
+
+            // Mettre à jour les endpoints pour inclure le nouveau port
+            callEndpoints.computeIfAbsent(sender, k -> new HashSet<>()).add(new CallEndpoint(sourceIp, sourcePort));
+            logger.info("Updated call endpoint for {} to {}:{}", sender, sourceIp, sourcePort);
+
+            if (data.length < 5) {
+                logger.warn("Packet too small from {}:{}", sourceIp, sourcePort);
+                return;
+            }
+
+            ByteArrayInputStream bais = new ByteArrayInputStream(data);
+            DataInputStream dis = new DataInputStream(bais);
+            byte packetType = dis.readByte();
+            int frameSize = dis.readInt();
+            logger.info("Received packet type {}, frame size {}", packetType, frameSize);
+
+            // Valider le type de paquet
+            if (packetType != 0 && packetType != 1) {
+                logger.warn("Invalid packet type {} from {}:{}", packetType, sourceIp, sourcePort);
+                return;
+            }
+
+            // Valider la taille du frame
+            if (frameSize <= 0 || frameSize > data.length - 5) {
+                logger.warn("Invalid frame size: expected {}, got {}, data length {}", frameSize, data.length - 5, data.length);
+                return;
+            }
+
+            byte[] frameData = new byte[frameSize];
+            dis.readFully(frameData);
+
+            Platform.runLater(() -> {
+                CallUI callUI = activeCalls.get(sender);
+                if (callUI != null) {
+                    if (packetType == 0) {
+                        callUI.receiveAudioData(frameData, frameSize);
+                        logger.info("Forwarded audio data to CallUI for {}", sender);
+                    } else if (packetType == 1) {
+                        callUI.receiveVideoFrame(frameData);
+                        logger.info("Forwarded video frame to CallUI for {}", sender);
+                    }
+                } else {
+                    logger.warn("No active call for sender {}", sender);
+                }
+            });
+        } catch (IOException e) {
+            logger.error("Error processing UDP packet from {}:{}: {}", sourceIp, sourcePort, e.getMessage(), e);
+        }
     }
 
     public void rejectCall(String caller) {
